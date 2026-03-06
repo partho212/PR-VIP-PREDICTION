@@ -1,14 +1,13 @@
 import asyncio
 import random
 import time
-import os  # <<-- Eti add kora hoyeche
 from datetime import datetime, timezone
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, ContextTypes
 from telegram.error import NetworkError
 
 # ================= CONFIG =================
-BOT_TOKEN = os.environ.get("BOT_TOKEN")  # <<-- Ekhane change kora hoyeche
+BOT_TOKEN = "8646973563:AAE2S3pJ5ZVf35CX6C8uYswwnxUKXJjc6JI"
 CHANNEL_LINK = "https://t.me/+aeSXW9qJ7sxiNzg1"
 REGISTER_LINK = "https://dkwin9.com/#/register?invitationCode=464381403476"
 ADMIN_ID = 6104907925
@@ -108,6 +107,89 @@ async def auto_predict(chat_id, context, user_id):
 
 # ================= ADMIN PANEL =================
 async def admin(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.effective_user.id != ADMIN_ID: return
+    keyboard = [
+        [InlineKeyboardButton("🚀 Start All", callback_data="admin_start_all"), InlineKeyboardButton("⛔ Stop All", callback_data="admin_stop_all")],
+        [InlineKeyboardButton("📊 Active Users", callback_data="admin_active_users"), InlineKeyboardButton("👥 Users Count", callback_data="admin_users_count")],
+        [InlineKeyboardButton("🗑 Reset History", callback_data="admin_reset_history"), InlineKeyboardButton("📢 Broadcast", callback_data="admin_broadcast")],
+        [InlineKeyboardButton("🔧 Manual Signal", callback_data="admin_manual_signal"), InlineKeyboardButton("🚫 Ban User", callback_data="admin_ban_user")],
+        [InlineKeyboardButton("📈 Live Stats", callback_data="admin_stats"), InlineKeyboardButton("📜 History", callback_data="admin_history")]
+    ]
+    await update.message.reply_text("👑 Admin Panel", reply_markup=InlineKeyboardMarkup(keyboard))
+
+async def admin_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    if query.from_user.id != ADMIN_ID: return
+    data = query.data
+    
+    if data == "admin_start_all":
+        for uid, chat_id in user_chats.items():
+            if uid in active_users and uid not in banned_users:
+                asyncio.create_task(auto_predict(chat_id, context, uid))
+        await query.edit_message_text("✅ Started all!")
+    elif data == "admin_stop_all":
+        active_users.clear()
+        await query.edit_message_text("⛔ Stopped all!")
+    elif data == "admin_active_users":
+        await query.edit_message_text(f"👥 Active Users List: {list(active_users)}")
+    elif data == "admin_users_count":
+        await query.edit_message_text(f"👥 Total Active Users: {len(active_users)}")
+    elif data == "admin_reset_history":
+        history.clear()
+        await query.edit_message_text("🗑 History cleared!")
+    elif data == "admin_broadcast":
+        await query.edit_message_text("📢 Use command: /broadcast <message>")
+    elif data == "admin_manual_signal":
+        await query.edit_message_text("🔧 Use command: /manual <BIG/SMALL> <Number>")
+    elif data == "admin_ban_user":
+        await query.edit_message_text("🚫 Use command: /ban <user_id>")
+    elif data == "admin_stats":
+        await query.edit_message_text(f"📈 Stats:\nActive: {len(active_users)}\nBanned: {len(banned_users)}\nHistory length: {len(history)}")
+    elif data == "admin_history":
+        await query.edit_message_text(f"📜 Last 10 signals: {', '.join(history)}")
+
+# ================= ADMIN COMMANDS =================
+async def broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.effective_user.id != ADMIN_ID: return
+    msg = " ".join(context.args)
+    if msg:
+        for chat_id in user_chats.values():
+            await safe_send_message(context.bot, chat_id, msg)
+        await update.message.reply_text("📢 Broadcast sent!")
+
+async def manual_signal(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.effective_user.id != ADMIN_ID: return
+    if len(context.args) >= 2:
+        msg = f"🎯 Manual Signal: {context.args[0]} | {context.args[1]}"
+        for chat_id in user_chats.values():
+            await safe_send_message(context.bot, chat_id, msg)
+        await update.message.reply_text("✅ Manual signal sent!")
+
+async def ban_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.effective_user.id != ADMIN_ID: return
+    try:
+        uid = int(context.args[0])
+        banned_users.add(uid)
+        if uid in active_users: active_users.remove(uid)
+        await update.message.reply_text(f"🚫 User {uid} banned.")
+    except: await update.message.reply_text("Usage: /ban <user_id>")
+
+# ================= MAIN =================
+def main():
+    app = Application.builder().token(BOT_TOKEN).build()
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(CommandHandler("admin", admin))
+    app.add_handler(CommandHandler("broadcast", broadcast))
+    app.add_handler(CommandHandler("manual", manual_signal))
+    app.add_handler(CommandHandler("ban", ban_user))
+    app.add_handler(CallbackQueryHandler(button, pattern="^join_clicked$|^confirm_join$"))
+    app.add_handler(CallbackQueryHandler(admin_button, pattern="^admin_"))
+    print("Bot Running...")
+    app.run_polling(drop_pending_updates=True)
+
+if __name__ == "__main__":
+    main()async def admin(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id != ADMIN_ID: return
     keyboard = [
         [InlineKeyboardButton("🚀 Start All", callback_data="admin_start_all"), InlineKeyboardButton("⛔ Stop All", callback_data="admin_stop_all")],
